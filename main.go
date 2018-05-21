@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net/http"
 
-	"github.com/skratchdot/open-golang/open"
+	v2 "google.golang.org/api/oauth2/v2"
 
+	"github.com/gin-gonic/gin"
+	uuid "github.com/satori/go.uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -15,40 +15,63 @@ const (
 	ClientID     = ""
 	ClientSecret = ""
 	RedirectURL  = "http://localhost:8080/callback"
-	State        = "6qK66Khnns6SMMIhsDCNUjZFubqdePmzZjiYVNV2zUIwsC6STdrI3A8qyj6E0sbQ"
 )
 
+var config = &oauth2.Config{
+	ClientID:     ClientID,
+	ClientSecret: ClientSecret,
+	Endpoint:     google.Endpoint,
+	Scopes:       []string{"openid", "email", "profile"},
+	RedirectURL:  RedirectURL,
+}
+
 func main() {
-	config := &oauth2.Config{
-		ClientID:     ClientID,
-		ClientSecret: ClientSecret,
-		Endpoint:     google.Endpoint,
-		Scopes:       []string{"openid"},
-		RedirectURL:  RedirectURL,
-	}
-
-	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		url := config.AuthCodeURL(State)
-		fmt.Fprintf(w, url+"\n")
-
-		open.Run(url)
+	g := gin.Default()
+	g.GET("/login", func(c *gin.Context) {
+		state := uuid.NewV4().String()
+		url := config.AuthCodeURL(state)
+		c.SetCookie("state", state, 360, "/", "", false, true)
+		c.Redirect(302, url)
 	})
 
-	http.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		if r.FormValue("state") != State {
-			fmt.Fprintf(w, "failed")
+	g.GET("/callback", func(c *gin.Context) {
+		cookie, err := c.Cookie("state")
+		if err != nil {
+			c.JSON(401, fmt.Sprintf("cookie not found: %v", err))
 			return
 		}
 
-		code := r.FormValue("code")
+		state := c.Query("state")
+		if cookie != state {
+			c.JSON(401, "state is invalid")
+			return
+		}
+
+		code := c.Query("code")
 		token, err := config.Exchange(oauth2.NoContext, code)
 		if err != nil {
-			fmt.Fprintf(w, "exchange error")
+			c.JSON(401, fmt.Sprintf("exchange=%s: %v", code, err))
 			return
 		}
 
-		fmt.Fprintf(w, token.AccessToken)
+		if !token.Valid() {
+			c.JSON(401, "token is invalid")
+			return
+		}
+
+		service, err := v2.New(config.Client(oauth2.NoContext, token))
+		if err != nil {
+			c.JSON(401, fmt.Sprintf("client new: %v", err))
+			return
+		}
+
+		if _, err := service.Tokeninfo().AccessToken(token.AccessToken).Context(oauth2.NoContext).Do(); err != nil {
+			c.JSON(401, fmt.Sprintf("token info: %v", err))
+			return
+		}
+
+		c.JSON(200, token)
 	})
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	g.Run(":8080")
 }
