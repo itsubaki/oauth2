@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
 
 	v2 "google.golang.org/api/oauth2/v2"
 
@@ -11,23 +13,22 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-const (
-	ClientID     = ""
-	ClientSecret = ""
-	RedirectURL  = "http://localhost:8080/callback"
-)
-
-var config = &oauth2.Config{
-	ClientID:     ClientID,
-	ClientSecret: ClientSecret,
-	Endpoint:     google.Endpoint,
-	Scopes:       []string{"openid", "email", "profile"},
-	RedirectURL:  RedirectURL,
+func New() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("REDIRECT_URL"),
+		Endpoint:     google.Endpoint,
+		Scopes:       []string{"openid", "email", "profile"},
+	}
 }
 
 func main() {
+	config := New()
+	fmt.Printf("%#v\n", config)
+
 	g := gin.Default()
-	g.GET("/login", func(c *gin.Context) {
+	g.GET("/", func(c *gin.Context) {
 		state := uuid.NewV4().String()
 		url := config.AuthCodeURL(state)
 		c.SetCookie("state", state, 360, "/", "", false, true)
@@ -48,7 +49,7 @@ func main() {
 		}
 
 		code := c.Query("code")
-		token, err := config.Exchange(oauth2.NoContext, code)
+		token, err := config.Exchange(context.Background(), code)
 		if err != nil {
 			c.JSON(401, fmt.Sprintf("exchange=%s: %v", code, err))
 			return
@@ -59,18 +60,19 @@ func main() {
 			return
 		}
 
-		service, err := v2.New(config.Client(oauth2.NoContext, token))
+		service, err := v2.New(config.Client(context.Background(), token))
 		if err != nil {
 			c.JSON(401, fmt.Sprintf("client new: %v", err))
 			return
 		}
 
-		if _, err := service.Tokeninfo().AccessToken(token.AccessToken).Context(oauth2.NoContext).Do(); err != nil {
+		info, err := service.Tokeninfo().AccessToken(token.AccessToken).Context(context.Background()).Do()
+		if err != nil {
 			c.JSON(401, fmt.Sprintf("token info: %v", err))
 			return
 		}
 
-		c.JSON(200, token)
+		c.JSON(200, info)
 	})
 
 	g.Run(":8080")
