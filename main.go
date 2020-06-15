@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	"google.golang.org/api/option"
+
 	v2 "google.golang.org/api/oauth2/v2"
 
 	"github.com/gin-gonic/gin"
@@ -53,8 +55,9 @@ func main() {
 			return
 		}
 
+		ctx := context.Background()
 		code := c.Query("code")
-		token, err := config.Exchange(context.Background(), code)
+		token, err := config.Exchange(ctx, code)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, fmt.Sprintf("exchange=%s: %v", code, err))
 			return
@@ -65,7 +68,7 @@ func main() {
 			return
 		}
 
-		service, err := v2.New(config.Client(context.Background(), token))
+		service, err := v2.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, fmt.Sprintf("client new: %v", err))
 			return
