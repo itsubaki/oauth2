@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
 	v2 "google.golang.org/api/oauth2/v2"
@@ -29,50 +30,54 @@ func main() {
 
 	g := gin.Default()
 	g.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, c.Request.Header)
+	})
+
+	g.GET("/login", func(c *gin.Context) {
 		state := uuid.NewV4().String()
 		url := config.AuthCodeURL(state)
 		c.SetCookie("state", state, 360, "/", "", false, true)
-		c.Redirect(302, url)
+		c.Redirect(http.StatusFound, url)
 	})
 
 	g.GET("/callback", func(c *gin.Context) {
 		cookie, err := c.Cookie("state")
 		if err != nil {
-			c.JSON(401, fmt.Sprintf("cookie not found: %v", err))
+			c.JSON(http.StatusUnauthorized, fmt.Sprintf("cookie not found: %v", err))
 			return
 		}
 
 		state := c.Query("state")
 		if cookie != state {
-			c.JSON(401, "state is invalid")
+			c.JSON(http.StatusUnauthorized, "state is invalid")
 			return
 		}
 
 		code := c.Query("code")
 		token, err := config.Exchange(context.Background(), code)
 		if err != nil {
-			c.JSON(401, fmt.Sprintf("exchange=%s: %v", code, err))
+			c.JSON(http.StatusUnauthorized, fmt.Sprintf("exchange=%s: %v", code, err))
 			return
 		}
 
 		if !token.Valid() {
-			c.JSON(401, "token is invalid")
+			c.JSON(http.StatusUnauthorized, "token is invalid")
 			return
 		}
 
 		service, err := v2.New(config.Client(context.Background(), token))
 		if err != nil {
-			c.JSON(401, fmt.Sprintf("client new: %v", err))
+			c.JSON(http.StatusUnauthorized, fmt.Sprintf("client new: %v", err))
 			return
 		}
 
 		info, err := service.Tokeninfo().AccessToken(token.AccessToken).Context(context.Background()).Do()
 		if err != nil {
-			c.JSON(401, fmt.Sprintf("token info: %v", err))
+			c.JSON(http.StatusUnauthorized, fmt.Sprintf("token info: %v", err))
 			return
 		}
 
-		c.JSON(200, info)
+		c.JSON(http.StatusOK, info)
 	})
 
 	g.Run(":8080")
