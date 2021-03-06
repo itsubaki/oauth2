@@ -1,5 +1,5 @@
 # oauth2-example
-oauth2 example for golang
+oauth2 example for Go
 
 ```
 $ export GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID"
