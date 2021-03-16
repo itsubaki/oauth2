@@ -6,14 +6,12 @@ import (
 	"net/http"
 	"os"
 
-	"google.golang.org/api/option"
-
-	v2 "google.golang.org/api/oauth2/v2"
-
 	"github.com/gin-gonic/gin"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	api "google.golang.org/api/oauth2/v2"
+	"google.golang.org/api/option"
 )
 
 func New() *oauth2.Config {
@@ -68,7 +66,7 @@ func main() {
 			return
 		}
 
-		service, err := v2.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+		service, err := api.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, fmt.Sprintf("client new: %v", err))
 			return
